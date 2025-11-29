@@ -68,7 +68,7 @@ if not OrionLib then
 end
 
 local Window = OrionLib:MakeWindow({
-    Name = "SorinHub | ESP & Aimbot",
+    Name = "SorinCoreHub | 0.1.0",
     IntroText = "by SorinSoftware Services",
     SaveConfig = true,
     ConfigFolder = "SorinHub",
