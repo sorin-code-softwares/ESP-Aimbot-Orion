@@ -52,6 +52,8 @@ return function(Tab, OrionLib, Window, ctx)
     ----------------------------------------------------------------
     local cflyConn
     local cflySpeed = 50
+    local cwalkConn
+    local cwalkSpeed = 16
 
     local function stopCFrameFly()
         if cflyConn then
@@ -105,18 +107,102 @@ return function(Tab, OrionLib, Window, ctx)
     end
 
     ----------------------------------------------------------------
+    -- CFrame walk (velocity follow camera forward)
+    ----------------------------------------------------------------
+    local function stopCFrameWalk()
+        if cwalkConn then
+            cwalkConn:Disconnect()
+            cwalkConn = nil
+        end
+    end
+
+    local function startCFrameWalk()
+        local char, hum, root = getCharacter()
+        if not (char and hum and root) then
+            return
+        end
+        if cwalkConn then
+            cwalkConn:Disconnect()
+        end
+
+        cwalkConn = RunService.Heartbeat:Connect(function(dt)
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+                local forward = Workspace.CurrentCamera.CFrame.LookVector
+                local flatForward = Vector3.new(forward.X, 0, forward.Z).Unit
+                local flatMove = Vector3.new(moveDir.X, 0, moveDir.Z)
+                if flatMove.Magnitude > 0 then
+                    flatMove = flatMove.Unit
+                    local desired = (flatForward * flatMove.Z + (Workspace.CurrentCamera.CFrame.RightVector * flatMove.X))
+                    desired = Vector3.new(desired.X, 0, desired.Z)
+                    if desired.Magnitude > 0 then
+                        desired = desired.Unit * cwalkSpeed
+                        root.CFrame = root.CFrame + desired * dt
+                    end
+                end
+            end
+        end)
+    end
+
+    local function setCFrameWalk(enabled)
+        if enabled then
+            startCFrameWalk()
+        else
+            stopCFrameWalk()
+        end
+    end
+
+    ----------------------------------------------------------------
     -- Freecam (lightweight)
     ----------------------------------------------------------------
     local freecam = {
         enabled = false,
-        speed = 1,
+        speed = 4,
         yaw = 0,
         pitch = 0,
         pos = nil,
         conn = nil,
         inputConn = nil,
         saved = nil,
+        charSaved = nil,
     }
+
+    local function freezeCharacter(enable)
+        local char, hum, root = getCharacter()
+        if not (char and hum and root) then
+            return
+        end
+        if enable then
+            freecam.charSaved = {
+                anchored = root.Anchored,
+                platform = hum.PlatformStand,
+                autorotate = hum.AutoRotate,
+                walk = hum.WalkSpeed,
+                jump = hum.JumpPower,
+                velocity = root.Velocity,
+                rotVelocity = root.RotVelocity,
+            }
+            root.Anchored = true
+            hum.PlatformStand = true
+            hum.AutoRotate = false
+            hum.WalkSpeed = 0
+            hum.JumpPower = 0
+            root.Velocity = Vector3.zero
+            root.RotVelocity = Vector3.zero
+        else
+            local saved = freecam.charSaved
+            if saved then
+                root.Anchored = saved.anchored
+                hum.PlatformStand = saved.platform
+                hum.AutoRotate = saved.autorotate
+                hum.WalkSpeed = saved.walk
+                hum.JumpPower = saved.jump
+                root.Velocity = saved.velocity or Vector3.zero
+                root.RotVelocity = saved.rotVelocity or Vector3.zero
+            end
+            freecam.charSaved = nil
+        end
+    end
 
     local function saveCameraState()
         local cam = Workspace.CurrentCamera
@@ -157,6 +243,7 @@ return function(Tab, OrionLib, Window, ctx)
             freecam.inputConn = nil
         end
         restoreCameraState(freecam.saved)
+        freezeCharacter(false)
         freecam.saved = nil
     end
 
@@ -176,6 +263,7 @@ return function(Tab, OrionLib, Window, ctx)
         cam.CameraType = Enum.CameraType.Scriptable
         UserInputService.MouseIconEnabled = false
         UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        freezeCharacter(true)
 
         freecam.inputConn = UserInputService.InputChanged:Connect(function(input, gpe)
             if gpe then
@@ -203,7 +291,7 @@ return function(Tab, OrionLib, Window, ctx)
             end
 
             if move.Magnitude > 0 then
-                move = move.Unit * speed * dt
+                move = move.Unit * speed * 12 * dt
             end
 
             local camCF = CFrame.new(freecam.pos) * CFrame.fromOrientation(freecam.pitch, freecam.yaw, 0)
@@ -273,6 +361,30 @@ return function(Tab, OrionLib, Window, ctx)
         end,
     })
 
+    local walkSection = Tab:AddSection({Name = "CFrame Walk"})
+    walkSection:AddToggle({
+        Name = "Enable CFrame Walk",
+        Default = false,
+        Save = true,
+        Flag = "mv_cwalk",
+        Callback = function(value)
+            setCFrameWalk(value)
+        end,
+    })
+
+    walkSection:AddSlider({
+        Name = "Walk Speed",
+        Min = 6,
+        Max = 80,
+        Increment = 1,
+        Default = cwalkSpeed,
+        Save = true,
+        Flag = "mv_cwalk_speed",
+        Callback = function(value)
+            cwalkSpeed = value
+        end,
+    })
+
     local freecamSection = Tab:AddSection({Name = "Freecam"})
     freecamSection:AddToggle({
         Name = "Enable Freecam",
@@ -287,7 +399,7 @@ return function(Tab, OrionLib, Window, ctx)
     freecamSection:AddSlider({
         Name = "Freecam Speed",
         Min = 0.5,
-        Max = 10,
+        Max = 30,
         Increment = 0.1,
         Default = freecam.speed,
         Save = true,
