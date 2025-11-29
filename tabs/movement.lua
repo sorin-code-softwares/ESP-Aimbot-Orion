@@ -189,6 +189,10 @@ return function(Tab, OrionLib, Window, ctx)
     local followFlyEnabled = false
     local followOrbit = false
     local followBodyVelocity
+    local followWanderOffset = nil
+    local followNextWanderTime = 0
+    local followOrbitAngle = 0
+    local followOrbitSpeed = 1.2
 
     local function listPlayers()
         local result = { "None" }
@@ -279,7 +283,6 @@ return function(Tab, OrionLib, Window, ctx)
             local delta = targetRoot.Position - myRoot.Position
             local dist = delta.Magnitude
 
-            -- better grounded check via ray when humanoid floor fails
             local function grounded()
                 if isGrounded(myHum) then
                     return true
@@ -310,13 +313,7 @@ return function(Tab, OrionLib, Window, ctx)
                     myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + horiz.Unit)
                 end
 
-                -- if the player is steering manually, don't force the follow; allow manual control until they stop
-                if UserInputService:IsKeyDown(Enum.KeyCode.W)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.A)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.S)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                    return
-                end
+                return
             else
                 cleanupFollowFly()
                 myHum.PlatformStand = false
@@ -329,36 +326,25 @@ return function(Tab, OrionLib, Window, ctx)
             local slack = 3
             local horiz = Vector3.new(delta.X, 0, delta.Z)
             if followOrbit and horiz.Magnitude > 1 then
-                local angle = tick() * 1.5
-                local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * math.clamp(dist, 5, 10)
+                followOrbitAngle = (followOrbitAngle + (math.min(followOrbitSpeed, 1.2) * dt)) % (math.pi * 2)
+                local offset = Vector3.new(math.cos(followOrbitAngle), 0, math.sin(followOrbitAngle)) * math.clamp(dist, 5, 10)
                 myHum:MoveTo(targetRoot.Position + offset)
             elseif dist > desired + slack then
-                if horiz.Magnitude > 0.1 and not (
-                    UserInputService:IsKeyDown(Enum.KeyCode.W)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.A)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.S)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.D)
-                ) then
+                if horiz.Magnitude > 0.1 then
                     myHum:MoveTo(targetRoot.Position)
                 end
             elseif dist < desired - slack and horiz.Magnitude > 0.1 then
-                if not (
-                    UserInputService:IsKeyDown(Enum.KeyCode.W)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.A)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.S)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.D)
-                ) then
-                    myHum:MoveTo(myRoot.Position - horiz.Unit * 2)
-                end
+                myHum:MoveTo(myRoot.Position - horiz.Unit * 2)
             else
-                if not (
-                    UserInputService:IsKeyDown(Enum.KeyCode.W)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.A)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.S)
-                    or UserInputService:IsKeyDown(Enum.KeyCode.D)
-                ) then
-                    myHum:Move(Vector3.new(), true)
+                -- wander around the target to avoid locking/stuttering
+                local now = tick()
+                if not followWanderOffset or now >= followNextWanderTime then
+                    local angle = math.random() * math.pi * 2
+                    local radius = math.clamp(dist, 4, 8)
+                    followWanderOffset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * radius
+                    followNextWanderTime = now + math.random(3, 5)
                 end
+                myHum:MoveTo(targetRoot.Position + followWanderOffset)
             end
         end)
     end
