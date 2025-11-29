@@ -128,16 +128,19 @@ return function(Tab, OrionLib, Window, ctx)
         cwalkConn = RunService.Heartbeat:Connect(function(dt)
             local moveDir = hum.MoveDirection
             if moveDir.Magnitude > 0 then
-                local forward = Workspace.CurrentCamera.CFrame.LookVector
-                local flatForward = Vector3.new(forward.X, 0, forward.Z).Unit
-                local flatMove = Vector3.new(moveDir.X, 0, moveDir.Z)
-                if flatMove.Magnitude > 0 then
-                    flatMove = flatMove.Unit
-                    local desired = (flatForward * flatMove.Z + (Workspace.CurrentCamera.CFrame.RightVector * flatMove.X))
-                    desired = Vector3.new(desired.X, 0, desired.Z)
-                    if desired.Magnitude > 0 then
-                        desired = desired.Unit * cwalkSpeed
-                        root.CFrame = root.CFrame + desired * dt
+                local camCF = Workspace.CurrentCamera.CFrame
+                local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
+                local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+                if right.Magnitude > 0 then right = right.Unit end
+                if forward.Magnitude > 0 then forward = forward.Unit end
+
+                local input = Vector3.new(moveDir.X, 0, moveDir.Z)
+                if input.Magnitude > 0 then
+                    input = input.Unit
+                    local worldMove = (right * input.X + forward * input.Z)
+                    if worldMove.Magnitude > 0 then
+                        worldMove = worldMove.Unit * cwalkSpeed * dt
+                        root.CFrame = root.CFrame + worldMove
                     end
                 end
             end
@@ -243,6 +246,8 @@ return function(Tab, OrionLib, Window, ctx)
             freecam.inputConn = nil
         end
         restoreCameraState(freecam.saved)
+        UserInputService.MouseIconEnabled = true
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         freezeCharacter(false)
         freecam.saved = nil
     end
