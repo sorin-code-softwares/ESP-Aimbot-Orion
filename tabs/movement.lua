@@ -279,7 +279,22 @@ return function(Tab, OrionLib, Window, ctx)
             local delta = targetRoot.Position - myRoot.Position
             local dist = delta.Magnitude
 
-            if followFlyEnabled and (dist > 12 or math.abs(delta.Y) > 8 or not isGrounded(myHum)) then
+            -- better grounded check via ray when humanoid floor fails
+            local function grounded()
+                if isGrounded(myHum) then
+                    return true
+                end
+                local params = RaycastParams.new()
+                params.FilterType = Enum.RaycastFilterType.Exclude
+                params.FilterDescendantsInstances = { myChar }
+                local ray = Workspace:Raycast(myRoot.Position, Vector3.new(0, -5, 0), params)
+                return ray ~= nil
+            end
+
+            local onGround = grounded()
+            local shouldFly = followFlyEnabled and ((dist > 10) or (math.abs(delta.Y) > 6) or not onGround)
+
+            if shouldFly then
                 if not followBodyVelocity then
                     followBodyVelocity = Instance.new("BodyVelocity")
                     followBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
@@ -290,7 +305,6 @@ return function(Tab, OrionLib, Window, ctx)
                 local targetSpeed = math.clamp(dist * 6, 0, 80)
                 followBodyVelocity.Velocity = dir * targetSpeed
 
-                -- keep facing target horizontally
                 local horiz = Vector3.new(delta.X, 0, delta.Z)
                 if horiz.Magnitude > 0.1 then
                     myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + horiz.Unit)
@@ -298,6 +312,9 @@ return function(Tab, OrionLib, Window, ctx)
                 return
             else
                 cleanupFollowFly()
+                myHum.PlatformStand = false
+                myRoot.Velocity = Vector3.zero
+                myRoot.RotVelocity = Vector3.zero
             end
 
             -- ground follow
