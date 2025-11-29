@@ -90,6 +90,12 @@ local MODULES = {
         file = "visuals_and_graphics.lua",
         icon = "graphics",
     },
+    {
+        name = "Aimbot",
+        url = TABS_BASE .. "aimbot.lua",
+        file = "aimbot.lua",
+        icon = "aimbot",
+    },
 }
 
 local function attachTab(entry)
