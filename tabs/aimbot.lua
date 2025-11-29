@@ -12,7 +12,7 @@ return function(Tab, OrionLib, Window, ctx)
         aimlock = false,
         aimbot = false,
         smooth = false,
-        smoothness = 0.4,
+        aimStrength = 0.6, -- lerp factor for aimlock
         aimPart = "Head",
         wallCheck = true,
         fovEnabled = false,
@@ -103,7 +103,7 @@ return function(Tab, OrionLib, Window, ctx)
                 local targetCFrame = CFrame.new(cameraPosition, cameraPosition + direction)
 
                 if state.smooth then
-                    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, state.smoothness)
+                    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, state.aimStrength)
                 else
                     Camera.CFrame = targetCFrame
                 end
@@ -120,13 +120,13 @@ return function(Tab, OrionLib, Window, ctx)
 
     -- UI
     if not Drawing then
-        Tab:AddParagraph("Hinweis", "Drawing API fehlt: FOV-Kreis wird nicht angezeigt, Aimlock funktioniert dennoch.")
+        Tab:AddParagraph("Note", "Drawing API missing: FOV circle will not render, aimlock still works.")
     end
 
     local aimlockSection = Tab:AddSection({Name = "Aimlock"})
 
-    aimlockSection:AddToggle({
-        Name = "Aimlock aktiv",
+    local aimlockToggle = aimlockSection:AddToggle({
+        Name = "Aimlock",
         Default = false,
         Save = true,
         Flag = "aimlock_enabled",
@@ -148,15 +148,15 @@ return function(Tab, OrionLib, Window, ctx)
     })
 
     aimlockSection:AddSlider({
-        Name = "Smoothness",
+        Name = "Aim Strength",
         Min = 0.05,
         Max = 1,
         Increment = 0.05,
-        Default = state.smoothness,
+        Default = state.aimStrength,
         Save = true,
-        Flag = "aimlock_smoothness",
+        Flag = "aimlock_strength",
         Callback = function(value)
-            state.smoothness = value
+            state.aimStrength = value
         end,
     })
 
@@ -181,7 +181,7 @@ return function(Tab, OrionLib, Window, ctx)
         end,
     })
 
-    local fovSection = Tab:AddSection({Name = "FOV Kreis"})
+    local fovSection = Tab:AddSection({Name = "FOV Circle"})
 
     fovSection:AddToggle({
         Name = "FOV anzeigen",
@@ -210,7 +210,7 @@ return function(Tab, OrionLib, Window, ctx)
     })
 
     fovSection:AddColorpicker({
-        Name = "FOV Farbe",
+        Name = "FOV Color",
         Default = state.fovColor,
         Save = true,
         Flag = "aim_fov_color",
@@ -222,13 +222,39 @@ return function(Tab, OrionLib, Window, ctx)
 
     local aimbotSection = Tab:AddSection({Name = "Aimbot (Silent)"})
 
-    aimbotSection:AddToggle({
+    local aimbotToggle = aimbotSection:AddToggle({
         Name = "Silent Aim",
         Default = state.aimbot,
         Save = true,
         Flag = "aimbot_enabled",
         Callback = function(value)
             state.aimbot = value
+        end,
+    })
+
+    aimlockSection:AddBind({
+        Name = "Aimlock Toggle Key",
+        Default = Enum.KeyCode.E,
+        Save = true,
+        Flag = "aimlock_bind",
+        Callback = function()
+            state.aimlock = not state.aimlock
+            if aimlockToggle and aimlockToggle.Set then
+                aimlockToggle:Set(state.aimlock)
+            end
+        end,
+    })
+
+    aimbotSection:AddBind({
+        Name = "Aimbot Toggle Key",
+        Default = Enum.KeyCode.R,
+        Save = true,
+        Flag = "aimbot_bind",
+        Callback = function()
+            state.aimbot = not state.aimbot
+            if aimbotToggle and aimbotToggle.Set then
+                aimbotToggle:Set(state.aimbot)
+            end
         end,
     })
 
