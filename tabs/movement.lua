@@ -295,6 +295,16 @@ return function(Tab, OrionLib, Window, ctx)
             end
 
             local onGround = grounded()
+            local manualInput = UserInputService:IsKeyDown(Enum.KeyCode.W)
+                or UserInputService:IsKeyDown(Enum.KeyCode.A)
+                or UserInputService:IsKeyDown(Enum.KeyCode.S)
+                or UserInputService:IsKeyDown(Enum.KeyCode.D)
+
+            if manualInput then
+                cleanupFollowFly()
+                return
+            end
+
             local shouldFly = followFlyEnabled and ((dist > 10) or (math.abs(delta.Y) > 6) or not onGround)
 
             if shouldFly then
@@ -305,7 +315,7 @@ return function(Tab, OrionLib, Window, ctx)
                     followBodyVelocity.Parent = myRoot
                 end
                 local dir = dist > 0.25 and delta.Unit or Vector3.zero
-                local targetSpeed = math.clamp(dist * 6, 0, 80)
+                local targetSpeed = math.clamp(dist * 4, 0, 60)
                 followBodyVelocity.Velocity = dir * targetSpeed
 
                 local horiz = Vector3.new(delta.X, 0, delta.Z)
