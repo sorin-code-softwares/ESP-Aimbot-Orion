@@ -196,6 +196,7 @@ return function(Tab, OrionLib, Window, ctx)
     local followEmoteFriendly = false
     local followLastMove = 0
     local followMoveCooldown = 0.05
+    local followBodyVelocity = nil
 
     local function listPlayers()
         local result = { "None" }
@@ -246,7 +247,12 @@ return function(Tab, OrionLib, Window, ctx)
     end
 
     local function cleanupFollowFly()
-        -- no-op placeholder (legacy fly assist removed)
+        if followBodyVelocity then
+            pcall(function()
+                followBodyVelocity:Destroy()
+            end)
+            followBodyVelocity = nil
+        end
     end
 
     local function stopFollow()
@@ -310,14 +316,24 @@ return function(Tab, OrionLib, Window, ctx)
                 return
             end
 
-            -- gentle jump assist only when vertical gap is high
-            if followFlyEnabled and math.abs(delta.Y) > 6 and not onGround then
-                myHum:MoveTo(targetRoot.Position + Vector3.new(0, 2, 0))
-                myHum.Jump = true
+            -- fly assist: smooth BodyVelocity when far/vertical gap/airborne
+            local shouldFly = followFlyEnabled and ((dist > 10) or (math.abs(delta.Y) > 6) or not onGround)
+            if shouldFly then
+                if not followBodyVelocity then
+                    followBodyVelocity = Instance.new("BodyVelocity")
+                    followBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+                    followBodyVelocity.Velocity = Vector3.zero
+                    followBodyVelocity.Parent = myRoot
+                end
+                local dir = dist > 0.2 and delta.Unit or Vector3.zero
+                local targetSpeed = math.clamp(dist * 4, 0, 60)
+                followBodyVelocity.Velocity = dir * targetSpeed
+            else
+                cleanupFollowFly()
             end
 
             -- ground follow (keep it simple to avoid wiggle)
-            local desired = 4
+            local desired = 6
             local horiz = Vector3.new(delta.X, 0, delta.Z)
             local horizMag = horiz.Magnitude
             local now = tick()
@@ -326,18 +342,31 @@ return function(Tab, OrionLib, Window, ctx)
                 return
             end
 
+            -- pick a gentle wander offset to avoid standing on top of target
+            if not followWanderOffset or now >= followNextWanderTime then
+                local angle = math.random() * math.pi * 2
+                local radius = math.clamp(desired, 3, 8)
+                followWanderOffset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * radius
+                followNextWanderTime = now + math.random(2, 4)
+            end
+
+            local targetPos = targetRoot.Position
+            if dist > desired + 1 and horizMag > 0.1 then
+                targetPos = targetPos + followWanderOffset
+            else
+                targetPos = targetPos + followWanderOffset * 0.35
+            end
+
             if followEmoteFriendly then
-                if dist > desired and horizMag > 0.05 then
-                    myHum:Move(horiz.Unit, true)
+                local dir = (targetPos - myRoot.Position)
+                dir = Vector3.new(dir.X, 0, dir.Z)
+                if dir.Magnitude > 0.05 then
+                    myHum:Move(dir.Unit, true)
                 else
                     myHum:Move(Vector3.new(), true)
                 end
             else
-                if dist > desired and horizMag > 0.1 then
-                    myHum:MoveTo(targetRoot.Position)
-                else
-                    myHum:Move(Vector3.new(), true)
-                end
+                myHum:MoveTo(targetPos)
             end
             followLastMove = now
         end)
@@ -658,24 +687,30 @@ return function(Tab, OrionLib, Window, ctx)
         end,
     })
 
-    Players.PlayerAdded:Connect(function()
+    local function refreshFollowDropdown()
         if followDropdown and followDropdown.Set then
             followDropdown:Set({
                 Options = listPlayers(),
                 CurrentValue = followTargetName or "None",
             })
         end
+    end
+
+    Players.PlayerAdded:Connect(function()
+        refreshFollowDropdown()
     end)
 
     Players.PlayerRemoving:Connect(function(plr)
         if followTargetName == plr.Name then
             followTargetName = nil
         end
-        if followDropdown and followDropdown.Set then
-            followDropdown:Set({
-                Options = listPlayers(),
-                CurrentValue = followTargetName or "None",
-            })
+        refreshFollowDropdown()
+    end)
+
+    task.spawn(function()
+        while true do
+            task.wait(5)
+            refreshFollowDropdown()
         end
     end)
 
