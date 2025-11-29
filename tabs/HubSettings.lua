@@ -149,7 +149,7 @@ return function(Tab, OrionLib, Window, ctx)
             return false, "queue_on_teleport is not available in this executor"
         end
 
-        local scriptSource = "loadstring(game:HttpGet('https://raw.githubusercontent.com/sorin-code-softwares/285e0deb-ec6e-4a23-9c0b-e33eb2301255/main/gameshub-loader.lua'))()"
+        local scriptSource = "loadstring(game:HttpGet('https://raw.githubusercontent.com/sorin-code-softwares/ESP-Aimbot-Orion/main/loader.lua'))()"
         local ok, err = pcall(q, scriptSource)
         if not ok then
             return false, tostring(err)
