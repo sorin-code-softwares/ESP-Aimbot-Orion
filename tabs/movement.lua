@@ -188,7 +188,6 @@ return function(Tab, OrionLib, Window, ctx)
     local followNearest = false
     local followFlyEnabled = false
     local followOrbit = false
-    local followBodyVelocity
     local followWanderOffset = nil
     local followNextWanderTime = 0
     local followOrbitAngle = 0
@@ -243,12 +242,7 @@ return function(Tab, OrionLib, Window, ctx)
     end
 
     local function cleanupFollowFly()
-        if followBodyVelocity then
-            pcall(function()
-                followBodyVelocity:Destroy()
-            end)
-            followBodyVelocity = nil
-        end
+        -- no-op placeholder (legacy fly assist removed)
     end
 
     local function stopFollow()
@@ -308,22 +302,9 @@ return function(Tab, OrionLib, Window, ctx)
             local shouldFly = followFlyEnabled and ((dist > 10) or (math.abs(delta.Y) > 6) or not onGround)
 
             if shouldFly then
-                if not followBodyVelocity then
-                    followBodyVelocity = Instance.new("BodyVelocity")
-                    followBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                    followBodyVelocity.Velocity = Vector3.zero
-                    followBodyVelocity.Parent = myRoot
-                end
-                local dir = dist > 0.25 and delta.Unit or Vector3.zero
-                local targetSpeed = math.clamp(dist * 4, 0, 60)
-                followBodyVelocity.Velocity = dir * targetSpeed
-
-                local horiz = Vector3.new(delta.X, 0, delta.Z)
-                if horiz.Magnitude > 0.1 then
-                    myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + horiz.Unit)
-                end
-
-                return
+                -- gentle jump assist only; avoid BodyVelocity/PlatformStand
+                myHum:MoveTo(targetRoot.Position + Vector3.new(0, 2, 0))
+                myHum.Jump = true
             else
                 cleanupFollowFly()
                 myHum.PlatformStand = false
