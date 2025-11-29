@@ -96,6 +96,12 @@ local MODULES = {
         file = "aimbot.lua",
         icon = "aimbot",
     },
+    {
+        name = "Movement",
+        url = TABS_BASE .. "movement.lua",
+        file = "movement.lua",
+        icon = "vehicle",
+    },
 }
 
 local function attachTab(entry)
