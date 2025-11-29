@@ -192,6 +192,8 @@ return function(Tab, OrionLib, Window, ctx)
     local followNextWanderTime = 0
     local followOrbitAngle = 0
     local followOrbitSpeed = 1.2
+    local followLastManual = 0
+    local followEmoteFriendly = false
 
     local function listPlayers()
         local result = { "None" }
@@ -295,47 +297,72 @@ return function(Tab, OrionLib, Window, ctx)
                 or UserInputService:IsKeyDown(Enum.KeyCode.D)
 
             if manualInput then
-                cleanupFollowFly()
+                followLastManual = tick()
+                myHum:Move(Vector3.new(), true)
                 return
             end
 
-            local shouldFly = followFlyEnabled and ((dist > 10) or (math.abs(delta.Y) > 6) or not onGround)
+            -- small grace period after manual input before follow resumes
+            if tick() - followLastManual < 0.6 then
+                myHum:Move(Vector3.new(), true)
+                return
+            end
 
-            if shouldFly then
-                -- gentle jump assist only; avoid BodyVelocity/PlatformStand
+            -- gentle jump assist only when vertical gap is high
+            if followFlyEnabled and math.abs(delta.Y) > 6 and not onGround then
                 myHum:MoveTo(targetRoot.Position + Vector3.new(0, 2, 0))
                 myHum.Jump = true
-            else
-                cleanupFollowFly()
-                myHum.PlatformStand = false
-                myRoot.Velocity = Vector3.zero
-                myRoot.RotVelocity = Vector3.zero
             end
 
             -- ground follow
             local desired = 8
             local slack = 3
             local horiz = Vector3.new(delta.X, 0, delta.Z)
-            if followOrbit and horiz.Magnitude > 1 then
-                followOrbitAngle = (followOrbitAngle + (math.min(followOrbitSpeed, 1.2) * dt)) % (math.pi * 2)
-                local offset = Vector3.new(math.cos(followOrbitAngle), 0, math.sin(followOrbitAngle)) * math.clamp(dist, 5, 10)
-                myHum:MoveTo(targetRoot.Position + offset)
-            elseif dist > desired + slack then
-                if horiz.Magnitude > 0.1 then
-                    myHum:MoveTo(targetRoot.Position)
+            local horizMag = horiz.Magnitude
+
+            if followEmoteFriendly then
+                -- emote-friendly: use Move() to preserve animations
+                if followOrbit and horizMag > 1 then
+                    followOrbitAngle = (followOrbitAngle + (math.min(followOrbitSpeed, 1.0) * dt)) % (math.pi * 2)
+                    local offset = Vector3.new(math.cos(followOrbitAngle), 0, math.sin(followOrbitAngle)) * math.clamp(dist, 5, 10)
+                    local dir = offset.Unit
+                    myHum:Move(dir, true)
+                elseif dist > desired + slack and horizMag > 0.05 then
+                    myHum:Move(horiz.Unit, true)
+                elseif dist < desired - slack and horizMag > 0.05 then
+                    myHum:Move(-horiz.Unit, true)
+                else
+                    local now = tick()
+                    if not followWanderOffset or now >= followNextWanderTime then
+                        local angle = math.random() * math.pi * 2
+                        local radius = math.clamp(dist, 3, 6)
+                        followWanderOffset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * radius
+                        followNextWanderTime = now + math.random(2, 4)
+                    end
+                    myHum:Move(followWanderOffset.Unit, true)
                 end
-            elseif dist < desired - slack and horiz.Magnitude > 0.1 then
-                myHum:MoveTo(myRoot.Position - horiz.Unit * 2)
             else
-                -- wander around the target to avoid locking/stuttering
-                local now = tick()
-                if not followWanderOffset or now >= followNextWanderTime then
-                    local angle = math.random() * math.pi * 2
-                    local radius = math.clamp(dist, 4, 8)
-                    followWanderOffset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * radius
-                    followNextWanderTime = now + math.random(3, 5)
+                -- default: MoveTo-based for more direct following
+                if followOrbit and horizMag > 1 then
+                    followOrbitAngle = (followOrbitAngle + (math.min(followOrbitSpeed, 1.0) * dt)) % (math.pi * 2)
+                    local offset = Vector3.new(math.cos(followOrbitAngle), 0, math.sin(followOrbitAngle)) * math.clamp(dist, 5, 10)
+                    myHum:MoveTo(targetRoot.Position + offset)
+                elseif dist > desired + slack then
+                    if horizMag > 0.1 then
+                        myHum:MoveTo(targetRoot.Position)
+                    end
+                elseif dist < desired - slack and horizMag > 0.1 then
+                    myHum:MoveTo(myRoot.Position - horiz.Unit * 2)
+                else
+                    local now = tick()
+                    if not followWanderOffset or now >= followNextWanderTime then
+                        local angle = math.random() * math.pi * 2
+                        local radius = math.clamp(dist, 4, 8)
+                        followWanderOffset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * radius
+                        followNextWanderTime = now + math.random(3, 5)
+                    end
+                    myHum:MoveTo(targetRoot.Position + followWanderOffset)
                 end
-                myHum:MoveTo(targetRoot.Position + followWanderOffset)
             end
         end)
     end
@@ -642,6 +669,16 @@ return function(Tab, OrionLib, Window, ctx)
             if not value then
                 cleanupFollowFly()
             end
+        end,
+    })
+
+    followSection:AddToggle({
+        Name = "Emote-Friendly (Move)",
+        Default = false,
+        Save = true,
+        Flag = "mv_follow_emote",
+        Callback = function(value)
+            followEmoteFriendly = value
         end,
     })
 
