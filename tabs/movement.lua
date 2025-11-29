@@ -53,7 +53,8 @@ return function(Tab, OrionLib, Window, ctx)
     local cflyConn
     local cflySpeed = 50
     local cwalkConn
-    local cwalkSpeed = 16
+    local cwalkStrength = 50 -- 0-100 scale
+    local cwalkSmartSprint = false
 
     local function stopCFrameFly()
         if cflyConn then
@@ -107,8 +108,17 @@ return function(Tab, OrionLib, Window, ctx)
     end
 
     ----------------------------------------------------------------
-    -- CFrame walk (velocity follow camera forward)
+    -- CFrame walk (slide-style speed boost)
     ----------------------------------------------------------------
+    local function strengthToSpeed(strength)
+        local t = math.clamp(strength or 0, 0, 100) / 100
+        return 10 + t * 80 -- 10..90 studs/s
+    end
+
+    local function isGrounded(hum)
+        return hum and hum.FloorMaterial and hum.FloorMaterial ~= Enum.Material.Air
+    end
+
     local function stopCFrameWalk()
         if cwalkConn then
             cwalkConn:Disconnect()
@@ -121,29 +131,43 @@ return function(Tab, OrionLib, Window, ctx)
         if not (char and hum and root) then
             return
         end
-        if cwalkConn then
-            cwalkConn:Disconnect()
-        end
+        stopCFrameWalk()
 
-        cwalkConn = RunService.Heartbeat:Connect(function(dt)
-            local moveDir = hum.MoveDirection
-            if moveDir.Magnitude > 0 then
-                local camCF = Workspace.CurrentCamera.CFrame
-                local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
-                local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
-                if right.Magnitude > 0 then right = right.Unit end
-                if forward.Magnitude > 0 then forward = forward.Unit end
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-                local input = Vector3.new(moveDir.X, 0, moveDir.Z)
-                if input.Magnitude > 0 then
-                    input = input.Unit
-                    local worldMove = (right * input.X + forward * input.Z)
-                    if worldMove.Magnitude > 0 then
-                        worldMove = worldMove.Unit * cwalkSpeed * dt
-                        root.CFrame = root.CFrame + worldMove
-                    end
-                end
+        cwalkConn = RunService.RenderStepped:Connect(function(dt)
+            if not (hum and root and char and char.Parent) then
+                return
             end
+            if hum.Sit or not isGrounded(hum) then
+                return
+            end
+
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude <= 0.01 then
+                return
+            end
+            if cwalkSmartSprint and not UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                return
+            end
+
+            moveDir = Vector3.new(moveDir.X, 0, moveDir.Z)
+            if moveDir.Magnitude <= 0 then
+                return
+            end
+            moveDir = moveDir.Unit
+
+            local extraSpeed = strengthToSpeed(cwalkStrength)
+            local step = moveDir * extraSpeed * dt
+
+            rayParams.FilterDescendantsInstances = {char}
+            local hit = Workspace:Raycast(root.Position, step + moveDir * 0.2, rayParams)
+            if hit and hit.Instance and hit.Instance.CanCollide ~= false then
+                return
+            end
+
+            root.CFrame = root.CFrame + step
         end)
     end
 
@@ -153,6 +177,147 @@ return function(Tab, OrionLib, Window, ctx)
         else
             stopCFrameWalk()
         end
+    end
+
+    ----------------------------------------------------------------
+    -- Follow Player (MoveTo / simple fly assist)
+    ----------------------------------------------------------------
+    local followEnabled = false
+    local followConn
+    local followTargetName = nil
+    local followNearest = false
+    local followFlyEnabled = false
+    local followOrbit = false
+    local followBodyVelocity
+
+    local function listPlayers()
+        local result = { "None" }
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                table.insert(result, plr.Name)
+            end
+        end
+        return result
+    end
+
+    local function nearestPlayer()
+        local myChar = LocalPlayer and LocalPlayer.Character
+        local myRoot = myChar and getCharacter()
+        myRoot = select(3, getCharacter())
+        if not myRoot then
+            return nil
+        end
+        local best, bestDist = nil, math.huge
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local root = plr.Character and (plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("UpperTorso"))
+                if root then
+                    local d = (root.Position - myRoot.Position).Magnitude
+                    if d < bestDist then
+                        bestDist = d
+                        best = plr
+                    end
+                end
+            end
+        end
+        return best
+    end
+
+    local function resolveFollowTarget()
+        if followNearest then
+            return nearestPlayer()
+        end
+        if not followTargetName or followTargetName == "None" then
+            return nil
+        end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Name == followTargetName then
+                return plr
+            end
+        end
+        return nil
+    end
+
+    local function cleanupFollowFly()
+        if followBodyVelocity then
+            pcall(function()
+                followBodyVelocity:Destroy()
+            end)
+            followBodyVelocity = nil
+        end
+    end
+
+    local function stopFollow()
+        followEnabled = false
+        if followConn then
+            followConn:Disconnect()
+            followConn = nil
+        end
+        cleanupFollowFly()
+    end
+
+    local function startFollow()
+        if followEnabled then
+            return
+        end
+        followEnabled = true
+        cleanupFollowFly()
+
+        followConn = RunService.Heartbeat:Connect(function(dt)
+            if not followEnabled then
+                return
+            end
+
+            local targetPlr = resolveFollowTarget()
+            local targetRoot = targetPlr and targetPlr.Character and (targetPlr.Character:FindFirstChild("HumanoidRootPart") or targetPlr.Character:FindFirstChild("Torso") or targetPlr.Character:FindFirstChild("UpperTorso"))
+            local myChar, myHum, myRoot = getCharacter()
+            if not (targetRoot and myHum and myRoot) then
+                cleanupFollowFly()
+                return
+            end
+
+            local delta = targetRoot.Position - myRoot.Position
+            local dist = delta.Magnitude
+
+            if followFlyEnabled and (dist > 12 or math.abs(delta.Y) > 8 or not isGrounded(myHum)) then
+                if not followBodyVelocity then
+                    followBodyVelocity = Instance.new("BodyVelocity")
+                    followBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+                    followBodyVelocity.Velocity = Vector3.zero
+                    followBodyVelocity.Parent = myRoot
+                end
+                local dir = dist > 0.25 and delta.Unit or Vector3.zero
+                local targetSpeed = math.clamp(dist * 6, 0, 80)
+                followBodyVelocity.Velocity = dir * targetSpeed
+
+                -- keep facing target horizontally
+                local horiz = Vector3.new(delta.X, 0, delta.Z)
+                if horiz.Magnitude > 0.1 then
+                    myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + horiz.Unit)
+                end
+                return
+            else
+                cleanupFollowFly()
+            end
+
+            -- ground follow
+            local desired = 8
+            local slack = 3
+            local horiz = Vector3.new(delta.X, 0, delta.Z)
+            if followOrbit and horiz.Magnitude > 1 then
+                local angle = tick() * 1.5
+                local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * math.clamp(dist, 5, 10)
+                myHum:MoveTo(targetRoot.Position + offset)
+            elseif dist > desired + slack then
+                if horiz.Magnitude > 0.1 then
+                    myHum:MoveTo(targetRoot.Position)
+                end
+            elseif dist < desired - slack and horiz.Magnitude > 0.1 then
+                myHum:MoveTo(myRoot.Position - horiz.Unit * 2)
+            else
+                myHum:Move(Vector3.new(), true)
+            end
+        end)
     end
 
     ----------------------------------------------------------------
@@ -377,18 +542,109 @@ return function(Tab, OrionLib, Window, ctx)
         end,
     })
 
-    walkSection:AddSlider({
-        Name = "Walk Speed",
-        Min = 6,
-        Max = 80,
-        Increment = 1,
-        Default = cwalkSpeed,
+    walkSection:AddToggle({
+        Name = "Smart Sprint (Shift)",
+        Default = false,
         Save = true,
-        Flag = "mv_cwalk_speed",
+        Flag = "mv_cwalk_sprint",
         Callback = function(value)
-            cwalkSpeed = value
+            cwalkSmartSprint = value
         end,
     })
+
+    walkSection:AddSlider({
+        Name = "Slide Strength",
+        Min = 0,
+        Max = 100,
+        Increment = 1,
+        Default = cwalkStrength,
+        Save = true,
+        Flag = "mv_cwalk_strength",
+        Callback = function(value)
+            cwalkStrength = value
+        end,
+    })
+
+    local followSection = Tab:AddSection({Name = "Follow Player"})
+
+    local followDropdown = followSection:AddDropdown({
+        Name = "Target Player",
+        Options = listPlayers(),
+        Default = "None",
+        Save = false,
+        Flag = "mv_follow_target",
+        Callback = function(selected)
+            followTargetName = selected == "None" and nil or selected
+        end,
+    })
+
+    followSection:AddToggle({
+        Name = "Enable Follow",
+        Default = false,
+        Save = false,
+        Flag = "mv_follow_enabled",
+        Callback = function(value)
+            if value then
+                startFollow()
+            else
+                stopFollow()
+            end
+        end,
+    })
+
+    followSection:AddToggle({
+        Name = "Follow Nearest",
+        Default = false,
+        Save = true,
+        Flag = "mv_follow_nearest",
+        Callback = function(value)
+            followNearest = value
+        end,
+    })
+
+    followSection:AddToggle({
+        Name = "Orbit Target",
+        Default = false,
+        Save = true,
+        Flag = "mv_follow_orbit",
+        Callback = function(value)
+            followOrbit = value
+        end,
+    })
+
+    followSection:AddToggle({
+        Name = "Fly Assist",
+        Default = false,
+        Save = true,
+        Flag = "mv_follow_fly",
+        Callback = function(value)
+            followFlyEnabled = value
+            if not value then
+                cleanupFollowFly()
+            end
+        end,
+    })
+
+    Players.PlayerAdded:Connect(function()
+        if followDropdown and followDropdown.Set then
+            followDropdown:Set({
+                Options = listPlayers(),
+                CurrentValue = followTargetName or "None",
+            })
+        end
+    end)
+
+    Players.PlayerRemoving:Connect(function(plr)
+        if followTargetName == plr.Name then
+            followTargetName = nil
+        end
+        if followDropdown and followDropdown.Set then
+            followDropdown:Set({
+                Options = listPlayers(),
+                CurrentValue = followTargetName or "None",
+            })
+        end
+    end)
 
     local freecamSection = Tab:AddSection({Name = "Freecam"})
     freecamSection:AddToggle({
