@@ -194,6 +194,8 @@ return function(Tab, OrionLib, Window, ctx)
     local followOrbitSpeed = 1.2
     local followLastManual = 0
     local followEmoteFriendly = false
+    local followLastMove = 0
+    local followMoveCooldown = 0.15
 
     local function listPlayers()
         local result = { "None" }
@@ -319,6 +321,11 @@ return function(Tab, OrionLib, Window, ctx)
             local slack = 3
             local horiz = Vector3.new(delta.X, 0, delta.Z)
             local horizMag = horiz.Magnitude
+            local now = tick()
+
+            if now - followLastMove < followMoveCooldown then
+                return
+            end
 
             if followEmoteFriendly then
                 -- emote-friendly: use Move() to preserve animations
@@ -332,7 +339,6 @@ return function(Tab, OrionLib, Window, ctx)
                 elseif dist < desired - slack and horizMag > 0.05 then
                     myHum:Move(-horiz.Unit, true)
                 else
-                    local now = tick()
                     if not followWanderOffset or now >= followNextWanderTime then
                         local angle = math.random() * math.pi * 2
                         local radius = math.clamp(dist, 3, 6)
@@ -354,7 +360,6 @@ return function(Tab, OrionLib, Window, ctx)
                 elseif dist < desired - slack and horizMag > 0.1 then
                     myHum:MoveTo(myRoot.Position - horiz.Unit * 2)
                 else
-                    local now = tick()
                     if not followWanderOffset or now >= followNextWanderTime then
                         local angle = math.random() * math.pi * 2
                         local radius = math.clamp(dist, 4, 8)
@@ -364,6 +369,7 @@ return function(Tab, OrionLib, Window, ctx)
                     myHum:MoveTo(targetRoot.Position + followWanderOffset)
                 end
             end
+            followLastMove = now
         end)
     end
 
