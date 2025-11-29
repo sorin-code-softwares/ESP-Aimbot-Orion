@@ -59,9 +59,12 @@ local function loadRemoteChunk(url)
     return result, nil
 end
 
-local OrionLib, libErr = loadRemoteChunk(ORION_URL)
+local OrionLib, libErr = loadLocalChunk("OrionLib.lua")
 if not OrionLib then
-    error(libErr)
+    OrionLib, libErr = loadRemoteChunk(ORION_URL)
+    if not OrionLib then
+        error(libErr)
+    end
 end
 
 local Window = OrionLib:MakeWindow({
