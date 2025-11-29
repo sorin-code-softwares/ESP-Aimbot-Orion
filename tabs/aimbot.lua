@@ -171,7 +171,7 @@ return function(Tab, OrionLib, Window, ctx)
     })
 
     aimlockSection:AddDropdown({
-        Name = "Zielknochen",
+        Name = "Target Bone",
         Options = {"Head", "UpperTorso", "LowerTorso", "HumanoidRootPart"},
         Default = state.aimPart,
         Save = true,
@@ -184,7 +184,7 @@ return function(Tab, OrionLib, Window, ctx)
     local fovSection = Tab:AddSection({Name = "FOV Circle"})
 
     fovSection:AddToggle({
-        Name = "FOV anzeigen",
+        Name = "Show FOV",
         Default = state.fovEnabled,
         Save = true,
         Flag = "aim_fov_enabled",
