@@ -70,6 +70,8 @@ local Window = OrionLib:MakeWindow({
     SaveConfig = true,
     ConfigFolder = "SorinHub",
     ShowIcon = true,
+    ShowLogo = false,
+    Icon = "rbxassetid://84637769762084",
 })
 
 local MODULES = {
