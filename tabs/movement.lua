@@ -309,7 +309,14 @@ return function(Tab, OrionLib, Window, ctx)
                 if horiz.Magnitude > 0.1 then
                     myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + horiz.Unit)
                 end
-                return
+
+                -- if the player is steering manually, don't force the follow; allow manual control until they stop
+                if UserInputService:IsKeyDown(Enum.KeyCode.W)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.A)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.S)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    return
+                end
             else
                 cleanupFollowFly()
                 myHum.PlatformStand = false
@@ -326,13 +333,32 @@ return function(Tab, OrionLib, Window, ctx)
                 local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * math.clamp(dist, 5, 10)
                 myHum:MoveTo(targetRoot.Position + offset)
             elseif dist > desired + slack then
-                if horiz.Magnitude > 0.1 then
+                if horiz.Magnitude > 0.1 and not (
+                    UserInputService:IsKeyDown(Enum.KeyCode.W)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.A)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.S)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.D)
+                ) then
                     myHum:MoveTo(targetRoot.Position)
                 end
             elseif dist < desired - slack and horiz.Magnitude > 0.1 then
-                myHum:MoveTo(myRoot.Position - horiz.Unit * 2)
+                if not (
+                    UserInputService:IsKeyDown(Enum.KeyCode.W)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.A)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.S)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.D)
+                ) then
+                    myHum:MoveTo(myRoot.Position - horiz.Unit * 2)
+                end
             else
-                myHum:Move(Vector3.new(), true)
+                if not (
+                    UserInputService:IsKeyDown(Enum.KeyCode.W)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.A)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.S)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.D)
+                ) then
+                    myHum:Move(Vector3.new(), true)
+                end
             end
         end)
     end
